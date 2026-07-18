@@ -40,7 +40,7 @@ exports.signup = async (req, res) => {
         // Initialize Plan
         await client.query(
             'INSERT INTO user_plan_details (user_id, plan_id, allocated_storage_gb) VALUES ($1, $2, $3)',
-            [userId, 'YOUR_FREE_PLAN_UUID', 5]
+            [userId, '3048e980-3ed7-401b-9b69-2a7fb46f05b3', 5]
         );
 
         // Initialize Usage
