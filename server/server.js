@@ -1,20 +1,21 @@
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const fs = require("fs");
+const dotenv= require("dotenv").config();
 
 // 1. Configure the Client
 const s3Client = new S3Client({
-  region: "us-east-1", // Sometimes required by SDK, even if your cloud ignores it
-  endpoint: "YOUR_ETHIO_TELECOM_ENDPOINT_URL", // e.g., https://obs.example.com
+  region: "ET-CLOUD-AA1", // Sometimes required by SDK, even if your cloud ignores it
+  endpoint: "obsv3.et-global-1.ethiotelecom.et", // e.g., https://obs.example.com
   credentials: {
-    accessKeyId: "YOUR_ACCESS_KEY",
-    secretAccessKey: "YOUR_SECRET_KEY",
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
   forcePathStyle: true, // IMPORTANT: Needed for most S3-compatible providers
 });
 
 // 2. Upload Function
 async function testUpload() {
-  const bucketName = "YOUR_BUCKET_NAME";
+  const bucketName = "test-buket";
   const fileName = "test-file.txt";
   
   // Create a dummy file for testing
