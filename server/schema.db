@@ -1,0 +1,103 @@
+-- Enable UUID generation
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. Plans table: Define your tiers (Free, Packaged, Per-GB)
+CREATE TABLE plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(50) NOT NULL,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('FIXED', 'PER_GB')),
+    storage_limit_gb BIGINT, 
+    price_per_gb DECIMAL(10, 2) DEFAULT 0,
+    monthly_fee DECIMAL(10, 2) DEFAULT 0,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- 2. Users table: Credentials and account status
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    is_admin BOOLEAN DEFAULT false,
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DEACTIVATED')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. User Plan details: Links users to plans and tracks current allocation
+CREATE TABLE user_plan_details (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    plan_id UUID REFERENCES plans(id),
+    allocated_storage_gb BIGINT NOT NULL,
+    start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- 4. Storage Usage: For quick metering of consumption
+CREATE TABLE storage_usage (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    used_bytes BIGINT DEFAULT 0,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. User Files: Metadata index of files stored in Ethio Telecom OBS
+CREATE TABLE user_files (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    obs_key VARCHAR(1024) NOT NULL, -- e.g., user_101/folder/myphoto.jpg
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Invitation Codes: For admin-controlled onboarding
+CREATE TABLE invitation_codes (
+    code VARCHAR(50) PRIMARY KEY,
+    used_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Track manual payment submissions
+CREATE TABLE payment_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    plan_id UUID REFERENCES plans(id), -- The plan they requested
+    allocated_storage_gb BIGINT NOT NULL, -- Storage associated with this request
+    fn_string VARCHAR(100) UNIQUE NOT NULL, -- The unique transaction identifier
+    amount_paid DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'DENIED')),
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP WITH TIME ZONE
+);
+
+
+
+
+-- Speed up queries when checking specific user storage
+CREATE INDEX idx_user_files_user_id ON user_files(user_id);
+
+-- Speed up file lookups by path (very important for OBS management)
+CREATE INDEX idx_user_files_obs_key ON user_files(obs_key);
+
+-- Index for plan management
+CREATE INDEX idx_user_plan_user_id ON user_plan_details(user_id);
+
+-- Index for admin dashboard performance
+CREATE INDEX idx_payment_requests_status ON payment_requests(status);
+
+
+
+-- Inside a single Transaction:
+BEGIN;
+
+-- 1. Update the user's plan details
+INSERT INTO user_plan_details (user_id, plan_id, allocated_storage_gb)
+VALUES ($user_id, $plan_id, $allocated_gb)
+ON CONFLICT (user_id) 
+DO UPDATE SET plan_id = EXCLUDED.plan_id, allocated_storage_gb = EXCLUDED.allocated_storage_gb;
+
+-- 2. Mark the request as approved
+UPDATE payment_requests 
+SET status = 'APPROVED', processed_at = CURRENT_TIMESTAMP 
+WHERE fn_string = $fn_string;
+
+COMMIT;
