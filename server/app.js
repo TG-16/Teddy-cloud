@@ -9,7 +9,7 @@ const fs = require("fs");
 const dotenv = require("dotenv").config();
 const { Readable } = require("stream");
 
-// 1. Configure the Client
+// 1. Configure the Client and set up credentials
 const s3Client = new S3Client({
   region: "ET-CLOUD-AA1", // Sometimes required by SDK, even if your cloud ignores it
   endpoint: "https://obsv3.et-global-1.ethiotelecom.et", // e.g., https://obs.example.com
